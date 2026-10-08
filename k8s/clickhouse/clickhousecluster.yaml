@@ -1,0 +1,48 @@
+# Single-replica, single-shard ClickHouse for the dev cluster (e2-standard-2 nodes: 2 vCPU /
+# 8GB). Services/StatefulSet are named ch-clickhouse-*; the client endpoint is
+# ch-clickhouse-headless.clickhouse.svc:8123 (HTTP) / :9000 (native), user `default`.
+#
+# The operator renders the pod with a restricted securityContext (uid 101, runAsNonRoot,
+# no privilege escalation, drop ALL, RuntimeDefault seccomp) - nothing to override here.
+apiVersion: clickhouse.com/v1alpha1
+kind: ClickHouseCluster
+metadata:
+  name: ch
+  namespace: clickhouse
+spec:
+  replicas: 1
+  shards: 1
+  keeperClusterRef:
+    name: ch
+  containerTemplate:
+    image:
+      repository: docker.io/clickhouse/clickhouse-server
+      # 26.3 is an LTS line; operator default is `latest`.
+      tag: "26.3.45.3"
+    # The operator default (512Mi limit) is too tight for real queries: ClickHouse caps itself
+    # at ~90% of the cgroup limit (max_server_memory_usage), merges and the mark/uncompressed
+    # caches need room. 2Gi is comfortable for an API's event/analytics tables at dev volume.
+    resources:
+      requests:
+        cpu: 250m
+        memory: 1Gi
+      limits:
+        cpu: "1"
+        memory: 2Gi
+  dataVolumeClaimSpec:
+    accessModes: [ReadWriteOnce]
+    resources:
+      requests:
+        storage: 10Gi
+  networkPolicy:
+    policy: Enabled
+  settings:
+    defaultUserPassword:
+      secret:
+        name: clickhouse-default-password
+        key: password
+    # query_log, part_log, text_log, metric_log, ... grow without bound by default; on a 10Gi
+    # disk a few days is plenty (only applied when the cluster is first created).
+    systemLogsTTLDays: 3
+    logger:
+      logToFile: false

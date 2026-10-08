@@ -1,0 +1,63 @@
+# Ingress NetworkPolicies for `clickhouse` (enforced by GKE Dataplane V2). Default deny, then:
+#   - the operator's own policies (spec.networkPolicy.policy: Enabled on both CRs): operator ->
+#     ClickHouse/Keeper management ports, ClickHouse -> Keeper, replica interserver traffic;
+#   - the two below: observability collectors -> otel-collector-clickhouse (OTLP), and that
+#     collector -> ClickHouse (native port for inserts, HTTP for its init container's
+#     CREATE DATABASE).
+# Humans reach ClickHouse's HTTP port with `kubectl port-forward` (gke-port-forward.sh), which
+# NetworkPolicy doesn't apply to.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: clickhouse
+spec:
+  podSelector: {}
+  policyTypes: [Ingress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: otel-collector-clickhouse
+  namespace: clickhouse
+spec:
+  podSelector:
+    matchLabels:
+      app: otel-collector-clickhouse
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: observability
+          podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values: [otel-collector, log-collector]
+      ports:
+        - protocol: TCP
+          port: 4317
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: clickhouse-clients
+  namespace: clickhouse
+spec:
+  # The operator labels ClickHouse server pods clickhouse.com/role=clickhouse-server; see
+  # `kubectl -n clickhouse get pods --show-labels` if this ever stops matching.
+  podSelector:
+    matchLabels:
+      clickhouse.com/role: clickhouse-server
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: otel-collector-clickhouse
+      ports:
+        - protocol: TCP
+          port: 9000
+        - protocol: TCP
+          port: 8123

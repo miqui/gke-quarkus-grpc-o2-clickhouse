@@ -1,0 +1,35 @@
+# ClickHouse Keeper (ZooKeeper replacement) - required by every ClickHouseCluster
+# (spec.keeperClusterRef). One node: no quorum to lose on a dev cluster that's rebuilt
+# regularly; 3 is the HA minimum. Services/StatefulSet are named ch-keeper-*.
+apiVersion: clickhouse.com/v1alpha1
+kind: KeeperCluster
+metadata:
+  name: ch
+  namespace: clickhouse
+spec:
+  replicas: 1
+  containerTemplate:
+    image:
+      repository: docker.io/clickhouse/clickhouse-keeper
+      # Operator default is `latest`; pin to the same LTS release as the server.
+      tag: "26.3.45.3"
+    # Keeper only holds ClickHouse's replication/DDL metadata - tiny for one replica.
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        cpu: 500m
+        memory: 512Mi
+  # GKE's default StorageClass (standard-rwo, pd-balanced).
+  dataVolumeClaimSpec:
+    accessModes: [ReadWriteOnce]
+    resources:
+      requests:
+        storage: 1Gi
+  networkPolicy:
+    policy: Enabled
+  settings:
+    logger:
+      # stdout only (kubectl logs), nothing written to the data volume.
+      logToFile: false

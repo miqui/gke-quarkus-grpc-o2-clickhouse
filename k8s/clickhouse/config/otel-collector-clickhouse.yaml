@@ -1,0 +1,53 @@
+# The only writer to ClickHouse. The observability collectors (otel-collector: API metrics +
+# traces; log-collector: API container logs only) forward copies here over OTLP, next to what they
+# already send to OpenObserve.
+#
+# Why a separate collector: the clickhouse exporter runs its CREATE DATABASE/TABLE DDL in
+# start(), and a failed start stops the whole collector. Inside the observability collectors, a
+# ClickHouse outage would take the OpenObserve pipelines down with it. Here, only this pod waits;
+# the upstream otlp exporters just queue/retry/drop.
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+
+processors:
+  batch: {}
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
+
+exporters:
+  clickhouse:
+    endpoint: tcp://ch-clickhouse-headless.clickhouse.svc.cluster.local:9000?dial_timeout=10s
+    # Created on start (create_schema defaults to true), with otel_logs, otel_traces and
+    # otel_metrics_{gauge,sum,histogram,summary,exponential_histogram} tables.
+    database: otel
+    username: default
+    password: ${env:CLICKHOUSE_PASSWORD}
+    # Table TTL, set when the tables are created - same 3 days as OpenObserve. Changing it later
+    # means ALTER TABLE ... MODIFY TTL by hand; the exporter won't touch existing tables.
+    ttl: 72h
+    timeout: 10s
+    sending_queue:
+      queue_size: 1000
+    retry_on_failure:
+      enabled: true
+
+service:
+  extensions: [health_check]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [clickhouse]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [clickhouse]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [clickhouse]

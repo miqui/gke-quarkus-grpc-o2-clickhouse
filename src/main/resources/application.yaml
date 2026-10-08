@@ -1,0 +1,129 @@
+# Runtime configuration. Environment variable names match k8s/configmap.yaml and the
+# postgres-credentials Secret (both injected with envFrom); the defaults suit a local run against
+# `docker compose up` (compose.yaml).
+spring:
+  application:
+    name: message-service
+  main:
+    banner-mode: off
+  threads:
+    virtual:
+      enabled: true
+
+  datasource:
+    # Cloud SQL is ENCRYPTED_ONLY: the ConfigMap sets DB_SSLMODE=require.
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:messagedb}?sslmode=${DB_SSLMODE:prefer}
+    username: ${DB_USER:message_app}
+    password: ${DB_PASSWORD:message_app}
+    hikari:
+      # 6 pods x 10 stays well under Cloud SQL's max_connections=100.
+      maximum-pool-size: ${DB_POOL_MAX:10}
+      minimum-idle: 2
+      connection-timeout: 5000
+
+  # Runs at startup on every replica; Flyway serialises them with a Postgres advisory lock.
+  # baseline-on-migrate + version 1 adopts a database created by the Python service's Alembic
+  # revision 0001 (identical schema) instead of failing on a non-empty schema.
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: "1"
+
+  grpc:
+    server:
+      port: ${GRPC_PORT:9090}
+      # Bounds the cost of one request: the largest valid request is a few KB.
+      inbound:
+        message:
+          max-size: 16KB
+      # In-flight calls get this long to finish after SIGTERM (terminationGracePeriodSeconds is 30).
+      shutdown:
+        grace-period: 20s
+      # Reflection (grpcurl without the .proto) and grpc.health.v1 are auto-configured from
+      # grpc-services; both are public, like everything else on this API.
+      reflection:
+        enabled: true
+      health:
+        enabled: true
+
+# Only Actuator is served over HTTP, for the kubelet probes and the load balancer health check.
+server:
+  port: ${MANAGEMENT_PORT:8081}
+  shutdown: graceful
+
+app:
+  hazelcast:
+    host: ${HAZELCAST_HOST:localhost}
+    port: ${HAZELCAST_PORT:5701}
+    connect-timeout: 20s
+
+logging:
+  structured:
+    format:
+      # One JSON object per line (with traceId/spanId while a span is active); the log collector
+      # ships stdout to OpenObserve's pod_logs stream.
+      console: ${LOG_FORMAT:logstash}
+  level:
+    com.hazelcast: WARN
+
+# datasource-micrometer: one span/timer per statement (SQL text, no bind values).
+# Connection and result-set observations would triple the span count for little value.
+jdbc:
+  includes: QUERY
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        # Liveness also fails if the Hazelcast client gave up for good (see CacheConfig).
+        liveness:
+          include: livenessState,hazelcastClient
+        readiness:
+          include: readinessState
+
+  opentelemetry:
+    resource-attributes:
+      k8s.pod.name: ${POD_NAME:local}
+    tracing:
+      export:
+        otlp:
+          endpoint: ${OTEL_TRACES_URL:http://localhost:4318/v1/traces}
+          timeout: 5s
+  # Metrics are pushed (OTLP/HTTP) every 15s; there is no scrape endpoint.
+  otlp:
+    metrics:
+      export:
+        enabled: ${OTEL_EXPORT_ENABLED:true}
+        url: ${OTEL_METRICS_URL:http://localhost:4318/v1/metrics}
+        step: 15s
+        read-timeout: 5s
+  tracing:
+    export:
+      otlp:
+        enabled: ${OTEL_EXPORT_ENABLED:true}
+    sampling:
+      # Parent-based: new traces sampled at this ratio, children follow their parent's decision.
+      probability: ${TRACES_SAMPLING_PROBABILITY:0.1}
+  metrics:
+    enable:
+      # HTTP only serves the kubelet probes and LB health checks: their timers would be noise.
+      http.server.requests: false
+      tomcat: false
+      # Long-task ("in flight") timers duplicate grpc_server_*/hazelcast_cache_* for unary calls.
+      grpc.server.active: false
+      hazelcast.cache.active: false
+      jdbc.query.active: false
+      # datasource-micrometer's pool gauges duplicate hikaricp_connections_*.
+      jdbc.connections: false
+    distribution:
+      # Fixed buckets rather than Micrometer's ~70 default ones: enough for p95/p99 via
+      # histogram_quantile at a fraction of the series (OpenObserve's MemTable is small).
+      slo:
+        grpc.server: 5ms,10ms,25ms,50ms,100ms,250ms,500ms,1s,2500ms,5s
+        hazelcast.cache: 1ms,2ms,5ms,10ms,25ms,50ms,100ms
+        jdbc.query: 1ms,2ms,5ms,10ms,25ms,50ms,100ms,250ms,1s

@@ -1,0 +1,24 @@
+# Values for the `clickhouse-operator-helm` chart 0.0.8, rendered by
+# k8s/argocd/apps/clickhouse-operator.yaml.
+#
+# Minimal dev install: no admission webhooks, so no cert-manager (this cluster doesn't run it).
+# What's lost is apply-time validation/defaulting of ClickHouseCluster/KeeperCluster - the
+# controller still applies the same defaults on every reconcile (it calls the webhook's
+# Default() itself), and an invalid spec shows up as a failed reconcile in the CR's status
+# instead of a rejected `kubectl apply`.
+
+controller:
+  # Only reconcile clusters in the `clickhouse` namespace (k8s/clickhouse/).
+  watchNamespaces: [clickhouse]
+
+certManager:
+  enabled: false
+
+webhook:
+  enabled: false
+
+# Plain-HTTP /metrics on :8080 (secure mode needs cert-manager-issued certs or a
+# self-signed one per restart). Not scraped yet.
+metrics:
+  enabled: true
+  secure: false

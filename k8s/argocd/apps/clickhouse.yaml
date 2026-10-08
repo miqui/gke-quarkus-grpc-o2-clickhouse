@@ -1,0 +1,24 @@
+# ArgoCD Application syncing k8s/clickhouse/ - a single-replica ClickHouse + single-node Keeper
+# (ClickHouseCluster / KeeperCluster CRs reconciled by the clickhouse-operator Application,
+# previous wave, which installs the CRDs), plus the namespace, its ResourceQuota, NetworkPolicy
+# and the ExternalSecret for the `default` user's password.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: clickhouse
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/miqui/gke-quarkus-grpc-o2-clickhouse.git
+    targetRevision: main
+    path: k8s/clickhouse
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: clickhouse
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true

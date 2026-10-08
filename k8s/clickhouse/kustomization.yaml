@@ -1,0 +1,22 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - resourcequota.yaml
+  - networkpolicy.yaml
+  - externalsecret.yaml
+  - keepercluster.yaml
+  - clickhousecluster.yaml
+  - otel-collector-clickhouse.yaml
+
+# Hash-suffixed so a config edit rolls the collector pod (same reason as
+# k8s/observability/kustomization.yaml).
+configMapGenerator:
+  - name: otel-collector-clickhouse-config
+    namespace: clickhouse
+    files:
+      - config.yaml=config/otel-collector-clickhouse.yaml
+    options:
+      labels:
+        app: otel-collector-clickhouse

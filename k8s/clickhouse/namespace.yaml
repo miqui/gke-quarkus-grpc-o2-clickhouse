@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: clickhouse
+  annotations:
+    # Same reason as k8s/observability/namespace.yaml: dropping this file must not make Argo
+    # delete the namespace, and with it the ClickHouse/Keeper PVCs.
+    argocd.argoproj.io/sync-options: Prune=false

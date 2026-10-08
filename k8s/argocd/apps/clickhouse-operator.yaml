@@ -1,0 +1,39 @@
+# The official ClickHouse Operator (https://github.com/ClickHouse/clickhouse-operator) from its
+# OCI Helm chart, with k8s/clickhouse-operator/values.yaml. It owns the ClickHouseCluster and
+# KeeperCluster CRDs; the cluster itself is the `clickhouse` Application (next wave).
+#
+# Two sources: this repo (only as a `$values` ref) and the chart. OCI chart: repoURL is the
+# registry path without the oci:// prefix - public, so no repository Secret.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: clickhouse-operator
+  namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "-1"
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/miqui/gke-quarkus-grpc-o2-clickhouse.git
+      targetRevision: main
+      ref: values
+    - repoURL: ghcr.io/clickhouse
+      chart: clickhouse-operator-helm
+      # Chart 0.0.8 = operator v0.0.8 (v1alpha1 API - pre-1.0, read release notes before bumping).
+      targetRevision: 0.0.8
+      helm:
+        releaseName: clickhouse-operator
+        valueFiles:
+          - $values/k8s/clickhouse-operator/values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: clickhouse-operator-system
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      # The CRDs are too large for client-side apply's last-applied-configuration annotation;
+      # upstream installs them server-side too.
+      - ServerSideApply=true

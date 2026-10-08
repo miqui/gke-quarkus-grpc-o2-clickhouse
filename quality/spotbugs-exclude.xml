@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<FindBugsFilter>
+    <!-- These exact constructor fields hold shared Spring/infrastructure dependencies, not
+         caller-owned data. Copying a repository, registry, or Hazelcast client is not appropriate. -->
+    <Match>
+        <Class name="dev.miqui.messageservice.cache.HazelcastMessageCache"/>
+        <Method name="&lt;init&gt;"/>
+        <Field name="~(client|observations)"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="dev.miqui.messageservice.grpc.AuthorGrpcService"/>
+        <Method name="&lt;init&gt;"/>
+        <Field name="authors"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="dev.miqui.messageservice.grpc.MessageGrpcService"/>
+        <Method name="&lt;init&gt;"/>
+        <Field name="messages"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="dev.miqui.messageservice.grpc.RpcMetricsInterceptor"/>
+        <Method name="&lt;init&gt;"/>
+        <Field name="registry"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="dev.miqui.messageservice.service.Authors"/>
+        <Method name="&lt;init&gt;"/>
+        <Field name="authors"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+    <Match>
+        <Class name="dev.miqui.messageservice.service.Messages"/>
+        <Method name="&lt;init&gt;"/>
+        <Field name="~(authors|cache|messages)"/>
+        <Bug pattern="EI_EXPOSE_REP2"/>
+    </Match>
+</FindBugsFilter>

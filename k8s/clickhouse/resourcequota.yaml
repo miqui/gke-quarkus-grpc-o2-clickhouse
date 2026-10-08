@@ -1,0 +1,21 @@
+# Requests / limits per pod:
+#   ClickHouse                   250m/1Gi      1/2Gi
+#   Keeper                       100m/256Mi    500m/512Mi
+#   otel-collector-clickhouse    50m/128Mi     250m/256Mi
+#   operator version-probe Job   250m/256Mi    1/256Mi     (short-lived, on create/upgrade)
+# plus headroom for the collector's rolling update. Scaling ClickHouse/Keeper replicas means
+# raising this first.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: clickhouse-quota
+  namespace: clickhouse
+spec:
+  hard:
+    requests.cpu: "1"
+    requests.memory: 3Gi
+    limits.cpu: "3"
+    limits.memory: 4Gi
+    pods: "6"
+    persistentvolumeclaims: "2"
+    requests.storage: 20Gi
