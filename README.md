@@ -673,11 +673,11 @@ Workload Identity pool. So most one-time steps really are one-time.
 | # | Step | Where | Check |
 | --- | --- | --- | --- |
 | 1 | Tools: `gcloud` (signed in as an owner of `k8s-dev-412419`), `kubectl`, `helm`, `op` (1Password CLI, signed in), `git`, `gh` (optional), `grpcurl` and `jq` (for `test-api.sh`) | your machine | `gcloud auth list`, `op whoami` |
-| 2 | 1Password items for the secrets in `.env.example` (Postgres app password, Grafana admin, OpenObserve root) and, optionally, a Cloudflare API token | 1Password | `cp .env.example .env`, point the `op://` URIs at them |
+| 2 | 1Password items for the secrets in `.env.example` (Postgres app password, Grafana admin, OpenObserve root, ClickHouse `default` password) and, optionally, a Cloudflare API token | 1Password | `cp .env.example .env`, point the `op://` URIs at them |
 | 3 | This repo public at `github.com/miqui/gke-quarkus-grpc-o2-clickhouse`, branch `main` - Argo CD syncs from there | GitHub | `git ls-remote https://github.com/miqui/gke-quarkus-grpc-o2-clickhouse.git main` |
 | 4 | Run `gke-deploy.sh` (below), then set the two GitHub Actions **repository variables** it prints: `GCP_WIF_PROVIDER`, `GCP_CI_SA` | GitHub -> Settings -> Secrets and variables -> Actions -> Variables | `gh variable list` |
 | 5 | Run CI once so Artifact Registry has an image (push to `main`, or *Actions -> message-service CI -> Run workflow*). Without it the API pods sit in `ImagePullBackOff`. | GitHub Actions | `gcloud artifacts docker images list us-central1-docker.pkg.dev/k8s-dev-412419/springboot-grpc-o2` |
-| 6 | Seed Secret Manager: `op run --env-file=.env -- env PROJECT_ID=k8s-dev-412419 ./gke-secrets-seed.sh` | your machine | `gcloud secrets list` shows the five secrets |
+| 6 | Seed Secret Manager: `op run --env-file=.env -- env PROJECT_ID=k8s-dev-412419 ./gke-secrets-seed.sh` | your machine | `gcloud secrets list` shows the six secrets |
 | 7 | Cloudflare `CNAME _acme-challenge.grpc -> <value printed by gke-deploy.sh>.authorize.certificatemanager.goog`, **DNS only (grey cloud)** | Cloudflare -> miqui.dev -> DNS | `dig +short _acme-challenge.grpc.miqui.dev CNAME` returns the target (not Cloudflare IPs) |
 | 8 | Wait for the certificate: `gcloud certificate-manager certificates describe grpc-cert --format='value(managed.state)'` -> `ACTIVE` (15-60 min after step 7) | - | see the certificate note below if it stays `PROVISIONING` |
 
@@ -686,7 +686,7 @@ Workload Identity pool. So most one-time steps really are one-time.
 ```bash
 export PROJECT_ID=k8s-dev-412419
 op run --env-file=.env -- ./gke-deploy.sh      # ~10 min; without op run, DNS isn't touched
-./gke-bootstrap.sh                             # ~20-25 min; waits for all 14 Applications
+./gke-bootstrap.sh                             # ~20-25 min; waits for all 16 Applications
 ```
 
 Manual step in between, **unless** `CLOUDFLARE_API_TOKEN` is in `.env` (then the script does it):
